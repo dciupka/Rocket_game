@@ -4,6 +4,8 @@ from settings import Settings
 from ship import Ship
 from bullet import Bullet
 from alien import Alien
+from time import  sleep
+from game_stats import GameStats
 
 class RocketGame:
     """Overall class to manage game assets and behavior."""
@@ -21,10 +23,12 @@ class RocketGame:
         self.bg_color = self.settings.bg_color
         pygame.display.set_caption("Rocket game")
 
+        self.stats=GameStats(self)
         self.ship = Ship(self)
         self.bullets = pygame.sprite.Group()
         self.aliens = pygame.sprite.Group()
         self._create_fleet()
+
 
     def run_game(self):
         """Start the main loop for the game"""
@@ -32,6 +36,7 @@ class RocketGame:
             self._check_events()  # sprawdzanie klawiszy
             self.ship.update()
             self._update_bullets()
+            self._update_aliens()
             self._update_screen()  # update obrazu wyświetlanego
 
     def _check_events(self):
@@ -69,7 +74,7 @@ class RocketGame:
             self.ship.moving_down = False
 
     def _fire_bullet(self):
-        if len(self.bullets)<self.settings.bullets_allowed:
+        if len(self.bullets) < self.settings.bullets_allowed:
             new_bullet = Bullet(self)
             self.bullets.add(new_bullet)
 
@@ -80,6 +85,14 @@ class RocketGame:
             if bullet.rect.bottom <= 0:
                 self.bullets.remove(bullet)
             print(len(self.bullets))
+
+        self._check_bullet_alien_collisions()
+
+    def _check_bullet_alien_collisions(self):
+        collision =pygame.sprite.groupcollide(self.bullets,self.aliens, True,True)
+        if not self.aliens:
+            self.bullets.empty()
+            self._create_fleet()
 
     def _update_screen(self):
         # Redraw the screen during each pass through the loop.
@@ -95,15 +108,50 @@ class RocketGame:
     def _create_fleet(self):
         "Creating full fleet"
         alien = Alien(self)
-        alien_width=alien.rect.width
-        available_space_x = self.settings.screen_width - (2* alien_width)
-        number_alien_x = available_space_x//(2 * alien_width)
+        alien_width, alien_height = alien.rect.size
+        ship_height = self.ship.rect.height
+        available_space_x = self.settings.screen_width - (2 * alien_width)
+        number_alien_x = available_space_x // (2 * alien_width)
+        available_space_y = self.settings.screen_height - (3 * alien_height) - ship_height
+        number_rows = available_space_y // (2 * alien_height)
 
-        for alien_number in range(number_alien_x):
-            alien= Alien(self)
-            alien.x = alien_width+2* alien_width*alien_number
-            alien.rect.x = alien.x
-            self.aliens.add(alien)
+        for row_number in range(number_rows):
+            for alien_number in range(number_alien_x):
+                self._create_alien(alien_number, row_number)
+
+    def _create_alien(self, alien_number, row_number):
+        alien = Alien(self)
+        alien_width = alien.rect.width
+        alien.x = alien_width + 2 * alien_width * alien_number
+        alien.rect.x = alien.x
+        alien.rect.y = alien.rect.height + 2 * alien.rect.height * row_number
+        self.aliens.add(alien)
+
+    def _check_fleet_edges(self):
+        for alien in self.aliens.sprites():
+            if alien.check_edges():
+                self._change_fleet_directions()
+                break
+
+    def _change_fleet_directions(self):
+        for alien in self.aliens.sprites():
+            alien.rect.y += self.settings.fleet_drop_speed
+        self.settings.fleet_direction *= -1
+
+    def _update_aliens(self):
+        "actualization of all positon alien"
+        self._check_fleet_edges()
+        self.aliens.update()
+        if pygame.sprite.spritecollideany(self.ship,self.aliens):
+            self._ship_hit()
+
+    def _ship_hit(self):
+        self.stats.ships_left -=1
+
+        self.aliens.empty()
+        self.bullets.empty()
+        self.ship.center_ship()
+        sleep(1)
 
 if __name__ == "__main__":
     # Make a game instance, and run the game.
